@@ -6,10 +6,11 @@ export async function middleware(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
   const isConfigured = 
-    supabaseUrl && 
+    !!(supabaseUrl && 
     supabaseAnonKey && 
+    (supabaseUrl.startsWith('http://') || supabaseUrl.startsWith('https://')) &&
     !supabaseUrl.includes('your-project-id') && 
-    !supabaseAnonKey.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
+    !supabaseAnonKey.includes('your-anon-key'));
 
   // If Supabase is not configured, bypass middleware auth checks (allow running in demo mode)
   if (!isConfigured) {

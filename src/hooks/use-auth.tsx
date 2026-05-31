@@ -39,7 +39,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const hasDemoCookie = document.cookie.split('; ').find(row => row.startsWith('lifeos_demo_mode='))?.split('=')[1] === 'true';
       
-      if (!isSupabaseConfigured || hasDemoCookie) {
+      let session = null;
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          session = data?.session || null;
+        } catch (e) {
+          console.error('Error fetching session:', e);
+        }
+      }
+
+      if (!isSupabaseConfigured || (hasDemoCookie && !session)) {
         // Fallback to Demo / LocalStorage mode
         const demoUserRaw = localStorage.getItem('lifeos_demo_user');
         if (demoUserRaw) {
@@ -64,8 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (supabase) {
         const client = supabase;
-        const { data: { session } } = await client.auth.getSession();
-        
+        // If there's a session or we're not in demo mode, clear any remaining demo state
+        if (hasDemoCookie) {
+          document.cookie = 'lifeos_demo_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+          localStorage.removeItem('lifeos_demo_user');
+        }
+        setIsDemo(false);
+
         if (session?.user) {
           // Fetch profile details
           const { data: profile } = await client
@@ -89,6 +104,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Subscribe to auth state updates
         const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
           if (session?.user) {
+            // Also clear demo mode if auth state changes to signed-in
+            document.cookie = 'lifeos_demo_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            localStorage.removeItem('lifeos_demo_user');
+            setIsDemo(false);
+
             const { data: profile } = await client
               .from('profiles')
               .select('*')
@@ -105,10 +125,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
           } else {
             setUser(null);
+            setIsDemo(false);
           }
           setLoading(false);
         });
 
+        setLoading(false);
         return () => subscription.unsubscribe();
       }
 

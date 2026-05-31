@@ -5,10 +5,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = 
-  supabaseUrl && 
+  !!(supabaseUrl && 
   supabaseAnonKey && 
+  (supabaseUrl.startsWith('http://') || supabaseUrl.startsWith('https://')) &&
   !supabaseUrl.includes('your-project-id') && 
-  !supabaseAnonKey.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
+  !supabaseAnonKey.includes('your-anon-key'));
 
 export async function createClient() {
   if (!isSupabaseConfigured) {

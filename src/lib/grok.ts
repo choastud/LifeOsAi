@@ -14,15 +14,23 @@ export async function sendToGrok(messages: GrokMessage[]): Promise<string> {
     return getMockAIResponse(messages);
   }
 
+  let url = GROK_API_URL;
+  let model = 'grok-2';
+
+  if (API_KEY.startsWith('gsk_')) {
+    url = 'https://api.groq.com/openai/v1/chat/completions';
+    model = 'llama-3.3-70b-versatile';
+  }
+
   try {
-    const response = await fetch(GROK_API_URL, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'grok-2', // standard stable Grok model, can be overridden by user
+        model,
         messages,
         temperature: 0.7,
       }),
@@ -30,7 +38,7 @@ export async function sendToGrok(messages: GrokMessage[]): Promise<string> {
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Grok API Error (${response.status}): ${errText}`);
+      throw new Error(`Grok/Groq API Error (${response.status}): ${errText}`);
     }
 
     const data = await response.json();
