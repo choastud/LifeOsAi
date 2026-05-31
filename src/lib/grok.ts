@@ -22,7 +22,7 @@ export async function sendToGrok(messages: GrokMessage[]): Promise<string> {
         'Authorization': `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'grok-2-1212', // standard stable Grok model, can be overridden by user
+        model: 'grok-2', // standard stable Grok model, can be overridden by user
         messages,
         temperature: 0.7,
       }),

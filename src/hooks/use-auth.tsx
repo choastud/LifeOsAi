@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    if (!isSupabaseConfigured || isDemo) {
+    if (!isSupabaseConfigured) {
       // Mock login for demo mode
       const mockUser: UserProfile = {
         id: 'demo-user-id',
@@ -138,6 +138,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      // Clear demo details on real sign-in
+      document.cookie = 'lifeos_demo_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      localStorage.removeItem('lifeos_demo_user');
+      setIsDemo(false);
+
       const { error } = await supabase!.auth.signInWithPassword({ email, password });
       if (error) return { error: error.message };
       router.push('/dashboard');
@@ -148,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    if (!isSupabaseConfigured || isDemo) {
+    if (!isSupabaseConfigured) {
       // Mock sign up for demo mode
       const mockUser: UserProfile = {
         id: 'demo-user-id',
@@ -167,6 +172,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      // Clear demo details on real sign-up
+      document.cookie = 'lifeos_demo_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      localStorage.removeItem('lifeos_demo_user');
+      setIsDemo(false);
+
       const { error } = await supabase!.auth.signUp({
         email,
         password,
