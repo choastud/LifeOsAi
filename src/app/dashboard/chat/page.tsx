@@ -6,13 +6,35 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase/client';
-import { Brain, Send, Sparkles, Plus, Loader2, Info } from 'lucide-react';
+import { 
+  Brain, 
+  Send, 
+  Sparkles, 
+  Plus, 
+  Loader2, 
+  Info, 
+  MessageSquare, 
+  Volume2, 
+  VolumeX, 
+  Mic, 
+  MicOff, 
+  Edit2, 
+  Trash2, 
+  Check, 
+  X 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
 }
 
 const PRESETS = [
@@ -29,21 +51,143 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Sessions state
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+
+  // Voice Bot states
+  const [isListening, setIsListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [recognition, setRecognition] = useState<any>(null);
+
+  // Initialize Speech Recognition
   useEffect(() => {
-    // Load chat logs
-    const fetchChatLogs = async () => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'en-US';
+        
+        rec.onstart = () => setIsListening(true);
+        rec.onend = () => setIsListening(false);
+        setRecognition(rec);
+      }
+    }
+  }, []);
+
+  // Speak Text aloud using SpeechSynthesis
+  const speakText = (text: string) => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel(); // cancel current speech
+      
+      const cleaned = text.replace(/[#*`_\[\]]/g, ''); // strip markdown
+      const utterance = new SpeechSynthesisUtterance(cleaned);
+      
+      const voices = window.speechSynthesis.getVoices();
+      // Try to find a premium/natural sounding voice
+      const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Toggle speech output
+  const toggleVoiceFeedback = () => {
+    if (voiceEnabled) {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      setVoiceEnabled(false);
+      toast.info('Voice feedback disabled');
+    } else {
+      setVoiceEnabled(true);
+      toast.success('Voice feedback enabled! AI will read aloud replies.');
+      speakText("Voice feedback enabled.");
+    }
+  };
+
+  // Handle Speech Recognition microphone click
+  const toggleListening = () => {
+    if (!recognition) {
+      toast.error('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+    } else {
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setInput(text);
+        handleSend(text);
+      };
+      recognition.start();
+    }
+  };
+
+  // Load chat sessions
+  useEffect(() => {
+    const fetchSessions = async () => {
       if (isDemo || !supabase) {
-        const localLogs = localStorage.getItem('lifeos_chat_logs');
+        const local = localStorage.getItem('lifeos_chat_sessions');
+        if (local) {
+          const parsed = JSON.parse(local);
+          setSessions(parsed);
+          if (parsed.length > 0) {
+            setActiveSessionId(parsed[0].id);
+          }
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('chat_sessions')
+          .select('*')
+          .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+        setSessions(data || []);
+        if (data && data.length > 0) {
+          setActiveSessionId(data[0].id);
+        }
+      } catch (err: any) {
+        console.error('Failed to load chat sessions:', err.message);
+      }
+    };
+
+    fetchSessions();
+  }, [isDemo, user]);
+
+  // Load messages for active session
+  useEffect(() => {
+    if (!activeSessionId) {
+      // Set a generic coach greeting on new empty chat
+      const welcome: Message = {
+        role: 'assistant',
+        content: `Hello ${user?.name?.split(' ')[0] || 'User'}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
+      };
+      setMessages([welcome]);
+      return;
+    }
+
+    const fetchSessionMessages = async () => {
+      setLoading(true);
+      if (isDemo || !supabase) {
+        const localLogs = localStorage.getItem(`lifeos_chat_logs_${activeSessionId}`);
         if (localLogs) {
           setMessages(JSON.parse(localLogs));
         } else {
-          const welcomeMsg: Message = {
-            role: 'assistant',
-            content: `Hello ${user?.name.split(' ')[0]}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
-          };
-          setMessages([welcomeMsg]);
-          localStorage.setItem('lifeos_chat_logs', JSON.stringify([welcomeMsg]));
+          setMessages([]);
         }
+        setLoading(false);
         return;
       }
 
@@ -51,49 +195,84 @@ export default function ChatPage() {
         const { data, error } = await supabase
           .from('chats')
           .select('message, response, created_at')
-          .eq('user_id', user?.id)
+          .eq('session_id', activeSessionId)
           .order('created_at', { ascending: true });
 
         if (error) throw error;
 
+        const formatted: Message[] = [];
         if (data && data.length > 0) {
-          const formatted: Message[] = [];
           data.forEach(log => {
             formatted.push({ role: 'user', content: log.message });
             formatted.push({ role: 'assistant', content: log.response });
           });
-          setMessages(formatted);
-        } else {
-          setMessages([{
-            role: 'assistant',
-            content: `Hello ${user?.name.split(' ')[0]}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
-          }]);
         }
+        setMessages(formatted);
       } catch (err: any) {
-        toast.error('Failed to load chat history: ' + err.message);
+        toast.error('Failed to load messages: ' + err.message);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchChatLogs();
-  }, [user, isDemo]);
+    fetchSessionMessages();
+  }, [activeSessionId, isDemo, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  // Send Message
   const handleSend = async (text: string) => {
     if (!text.trim() || loading) return;
 
+    let currentSessionId = activeSessionId;
+
+    // 1. Automatically create a session if none is active
+    if (!currentSessionId) {
+      const title = text.length > 25 ? text.slice(0, 25) + '...' : text;
+      const uuid = 'local_' + Math.random().toString(36).substring(2, 9);
+      
+      if (isDemo || !supabase) {
+        const newSess: ChatSession = {
+          id: uuid,
+          title,
+          created_at: new Date().toISOString()
+        };
+        const updated = [newSess, ...sessions];
+        localStorage.setItem('lifeos_chat_sessions', JSON.stringify(updated));
+        setSessions(updated);
+        currentSessionId = uuid;
+        setActiveSessionId(uuid);
+      } else {
+        try {
+          const { data, error } = await supabase
+            .from('chat_sessions')
+            .insert({ user_id: user?.id, title })
+            .select()
+            .single();
+
+          if (error) throw error;
+          setSessions(prev => [data, ...prev]);
+          currentSessionId = data.id;
+          setActiveSessionId(data.id);
+        } catch (err: any) {
+          toast.error('Failed to start chat session: ' + err.message);
+          return;
+        }
+      }
+    }
+
     const userMessage: Message = { role: 'user', content: text };
-    const updatedMessages = [...messages, userMessage];
+    const updatedMessages = [...messages.filter(m => m.content), userMessage];
     
     setMessages(updatedMessages);
     setInput('');
     setLoading(true);
 
+    // Save user message immediately in local mode
     if (isDemo || !supabase) {
-      // Mock API call locally
-      localStorage.setItem('lifeos_chat_logs', JSON.stringify(updatedMessages));
+      localStorage.setItem(`lifeos_chat_logs_${currentSessionId}`, JSON.stringify(updatedMessages));
       
       try {
         const res = await fetch('/api/chat', {
@@ -101,7 +280,8 @@ export default function ChatPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
-            userId: null
+            userId: null,
+            sessionId: null
           })
         });
 
@@ -112,26 +292,29 @@ export default function ChatPage() {
           const aiMessage: Message = { role: 'assistant', content: data.response };
           const finalMessages = [...updatedMessages, aiMessage];
           setMessages(finalMessages);
-          localStorage.setItem('lifeos_chat_logs', JSON.stringify(finalMessages));
+          localStorage.setItem(`lifeos_chat_logs_${currentSessionId}`, JSON.stringify(finalMessages));
           
-          // Auto parsing memories or goals inside client to make it feel integrated
+          if (voiceEnabled) {
+            speakText(data.response);
+          }
           parseAICoaching(data.response);
         }
       } catch {
         setLoading(false);
-        toast.error('Failed to fetch reply from local server');
+        toast.error('Failed to get mock response.');
       }
       return;
     }
 
-    // Supabase mode
+    // Live Supabase mode
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
-          userId: user?.id
+          userId: user?.id,
+          sessionId: currentSessionId
         })
       });
 
@@ -140,18 +323,21 @@ export default function ChatPage() {
 
       if (data.response) {
         setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+        if (voiceEnabled) {
+          speakText(data.response);
+        }
         parseAICoaching(data.response);
       } else {
-        toast.error('Empty reply received');
+        toast.error('Empty response');
       }
     } catch (err: any) {
       setLoading(false);
-      toast.error('Failed to query assistant: ' + err.message);
+      toast.error('Error connecting to coach: ' + err.message);
     }
   };
 
+  // Helper coaching tag parsing
   const parseAICoaching = (aiReply: string) => {
-    // Look for tags like "Goal 1" or "Goal 2" or "Memory" to simulate auto-extraction
     if (aiReply.includes('Goal 1') || aiReply.includes('Goal 2')) {
       toast.info('Coaching Goal Detected! Added draft goals to your dashboard.', {
         action: {
@@ -159,7 +345,6 @@ export default function ChatPage() {
           onClick: () => window.location.href = '/dashboard/goals'
         }
       });
-      // Add mock goals to localStorage for instant experience
       const existing = JSON.parse(localStorage.getItem('lifeos_goals') || '[]');
       if (aiReply.includes('Figma')) {
         const added = [
@@ -184,112 +369,286 @@ export default function ChatPage() {
     }
   };
 
-  const clearChat = () => {
-    const welcomeMsg: Message = {
-      role: 'assistant',
-      content: `Hello ${user?.name.split(' ')[0]}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
-    };
-    setMessages([welcomeMsg]);
-    localStorage.setItem('lifeos_chat_logs', JSON.stringify([welcomeMsg]));
-    toast.success('Chat log cleared');
+  // Start new empty session
+  const startNewChat = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setActiveSessionId(null);
+    setMessages([]);
+  };
+
+  // Rename Session
+  const renameSession = async (id: string, title: string) => {
+    if (!title.trim()) return;
+
+    if (isDemo || !supabase) {
+      const updated = sessions.map(s => s.id === id ? { ...s, title } : s);
+      localStorage.setItem('lifeos_chat_sessions', JSON.stringify(updated));
+      setSessions(updated);
+    } else {
+      try {
+        const { error } = await supabase
+          .from('chat_sessions')
+          .update({ title })
+          .eq('id', id);
+
+        if (error) throw error;
+        setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s));
+      } catch (err: any) {
+        toast.error('Failed to rename session: ' + err.message);
+      }
+    }
+    setEditingSessionId(null);
+  };
+
+  // Delete Session
+  const deleteSession = async (id: string) => {
+    if (isDemo || !supabase) {
+      const updated = sessions.filter(s => s.id !== id);
+      localStorage.setItem('lifeos_chat_sessions', JSON.stringify(updated));
+      localStorage.removeItem(`lifeos_chat_logs_${id}`);
+      setSessions(updated);
+      if (activeSessionId === id) {
+        setActiveSessionId(updated.length > 0 ? updated[0].id : null);
+      }
+      toast.success('Conversation thread deleted');
+    } else {
+      try {
+        const { error } = await supabase
+          .from('chat_sessions')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        const updated = sessions.filter(s => s.id !== id);
+        setSessions(updated);
+        if (activeSessionId === id) {
+          setActiveSessionId(updated.length > 0 ? updated[0].id : null);
+        }
+        toast.success('Conversation thread deleted');
+      } catch (err: any) {
+        toast.error('Failed to delete conversation: ' + err.message);
+      }
+    }
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8.5rem)]">
-      {/* Sidebar presets panel */}
-      <div className="hidden lg:block lg:col-span-3 space-y-4 text-left">
-        <Card className="glass-card border-border/40 h-full p-4 space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-              <Brain className="w-4 h-4 text-accent" />
-              <span>Coaching Starters</span>
-            </h3>
-            <p className="text-[11px] text-muted-foreground">Select a topic to launch a guided AI roadmap flow.</p>
+      {/* Sidebar Chat Sessions List */}
+      <div className="hidden lg:block lg:col-span-3 h-full">
+        <Card className="glass-card border-border/40 h-full p-4 flex flex-col justify-between">
+          <div className="space-y-4 overflow-hidden flex flex-col flex-1">
+            {/* New Chat Trigger */}
+            <Button
+              onClick={startNewChat}
+              variant="outline"
+              className="w-full justify-start gap-2 border-dashed border-primary/40 hover:border-primary rounded-xl py-5 font-semibold text-xs"
+            >
+              <Plus className="w-4 h-4 text-accent" />
+              <span>New Conversation</span>
+            </Button>
+
+            <div className="space-y-1">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Previous Chats</h3>
+            </div>
+
+            {/* Scrollable list */}
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 select-none">
+              {sessions.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-[10px] text-muted-foreground font-medium">No previous logs found.</p>
+                </div>
+              ) : (
+                sessions.map(s => {
+                  const isActive = activeSessionId === s.id;
+                  const isEditing = editingSessionId === s.id;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all duration-200 ${
+                        isActive
+                          ? 'border-primary/50 bg-primary/5 text-primary'
+                          : 'border-transparent bg-background/30 text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          if (!isEditing) setActiveSessionId(s.id);
+                        }}
+                        className="flex items-center gap-2 text-xs font-semibold text-left truncate flex-1"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 shrink-0 text-accent/70" />
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') renameSession(s.id, editingTitle);
+                              if (e.key === 'Escape') setEditingSessionId(null);
+                            }}
+                            className="bg-transparent border-none outline-none font-bold text-foreground w-full p-0 h-4"
+                          />
+                        ) : (
+                          <span className="truncate">{s.title}</span>
+                        )}
+                      </button>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => renameSession(s.id, editingTitle)} className="p-0.5 hover:bg-primary/20 rounded">
+                              <Check className="w-3 h-3 text-emerald-600" />
+                            </button>
+                            <button onClick={() => setEditingSessionId(null)} className="p-0.5 hover:bg-primary/20 rounded">
+                              <X className="w-3 h-3 text-destructive" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingSessionId(s.id);
+                                setEditingTitle(s.title);
+                              }}
+                              className="p-1 hover:bg-secondary rounded"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => deleteSession(s.id)} className="p-1 hover:bg-secondary rounded hover:text-destructive">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-          
-          <div className="flex flex-col gap-2 pt-2">
-            {PRESETS.map((p, i) => (
-              <button
-                key={i}
-                onClick={() => handleSend(p)}
-                disabled={loading}
-                className="text-xs text-left p-3 rounded-xl border border-border/70 bg-background/50 hover:bg-primary/5 hover:text-primary transition-all duration-200 leading-normal font-semibold text-foreground/80 hover:border-primary/50"
+
+          {/* Voice Controls Panel at bottom */}
+          <div className="pt-4 border-t border-border/40 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-muted-foreground">Voice Assistant</span>
+              <Button
+                onClick={toggleVoiceFeedback}
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 rounded-lg ${voiceEnabled ? 'text-accent bg-accent/10' : 'text-muted-foreground'}`}
               >
-                "{p}"
-              </button>
-            ))}
+                {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </Button>
+            </div>
+            <div className="text-[10px] text-muted-foreground leading-normal flex items-start gap-1">
+              <Info className="w-3 h-3 text-accent shrink-0 mt-0.5" />
+              <span>SpeechSynthesis speaks responses when enabled.</span>
+            </div>
           </div>
-
-          <div className="pt-4 border-t border-border/40 text-[10px] text-muted-foreground flex items-start gap-1.5 leading-normal">
-            <Info className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
-            <span>Grok 3 automatically analyzes your messages to extract custom goals, learning courses, and key memories.</span>
-          </div>
-
-          <Button 
-            onClick={clearChat}
-            variant="ghost" 
-            className="w-full text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
-          >
-            Clear Conversation Logs
-          </Button>
         </Card>
       </div>
 
       {/* Main chat window */}
       <div className="lg:col-span-9 flex flex-col h-full">
         <Card className="glass-card border-border/40 flex flex-col h-full overflow-hidden shadow-sm">
-          {/* Messages block */}
+          {/* Messages block / Empty Chat Panel */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-background/20 select-text">
-            <AnimatePresence initial={false}>
-              {messages.map((msg, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`flex items-start gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-accent/20 text-accent-foreground'
-                    }`}>
-                      {msg.role === 'user' ? user?.name[0] : <Brain className="w-4 h-4" />}
-                    </div>
-                    
-                    <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm text-left leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-tr-none'
-                        : 'bg-background/80 border border-border/40 text-foreground rounded-tl-none whitespace-pre-wrap font-medium space-y-3'
-                    }`}>
-                      {msg.content}
-                    </div>
+            {messages.length <= 1 && !activeSessionId ? (
+              // ChatGPT-style empty landing layout
+              <div className="h-full flex flex-col items-center justify-center max-w-xl mx-auto text-center space-y-8 select-none">
+                <div className="space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto text-primary shadow-inner">
+                    <Brain className="w-8 h-8 text-accent animate-pulse" />
                   </div>
-                </motion.div>
-              ))}
+                  <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
+                    How can I help you today, {user?.name?.split(' ')[0]}?
+                  </h2>
+                  <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                    Ask me to generate a personalized career plan, review journal themes, or establish routine checklists.
+                  </p>
+                </div>
 
-              {loading && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex justify-start"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-accent/20 text-accent-foreground flex items-center justify-center">
-                      <Brain className="w-4 h-4 animate-bounce" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  {PRESETS.map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSend(p)}
+                      disabled={loading}
+                      className="text-xs text-left p-4 rounded-2xl border border-border/80 bg-background/85 hover:bg-primary/5 hover:text-primary transition-all duration-200 leading-normal font-semibold text-foreground/80 hover:border-primary/50 shadow-sm"
+                    >
+                      "{p}"
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <AnimatePresence initial={false}>
+                {messages.map((msg, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`flex items-start gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                        msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-accent/20 text-accent-foreground'
+                      }`}>
+                        {msg.role === 'user' ? user?.name[0] : <Brain className="w-4 h-4" />}
+                      </div>
+                      
+                      <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm text-left leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground rounded-tr-none'
+                          : 'bg-background/80 border border-border/40 text-foreground rounded-tl-none whitespace-pre-wrap font-medium space-y-3'
+                      }`}>
+                        {msg.content}
+                      </div>
                     </div>
-                    <div className="bg-background/80 border border-border/40 rounded-2xl rounded-tl-none px-4 py-3.5 flex items-center gap-1.5 shadow-sm">
-                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </motion.div>
+                ))}
+
+                {loading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-start"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-accent/20 text-accent-foreground flex items-center justify-center">
+                        <Brain className="w-4 h-4 animate-bounce" />
+                      </div>
+                      <div className="bg-background/80 border border-border/40 rounded-2xl rounded-tl-none px-4 py-3.5 flex items-center gap-1.5 shadow-sm">
+                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* Chat input block */}
           <div className="p-4 border-t border-border/40 bg-secondary/10 flex flex-col gap-2">
+            {/* Listening Wave feedback */}
+            {isListening && (
+              <div className="flex items-center gap-1.5 px-3 py-1">
+                <div className="w-1.5 h-3 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="w-1.5 h-4.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-1.5 h-2.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="w-1.5 h-3.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
+                <span className="text-[10px] font-bold text-accent animate-pulse ml-1.5 uppercase tracking-wider">Listening to speech...</span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -297,6 +656,16 @@ export default function ChatPage() {
               }}
               className="flex gap-2"
             >
+              {/* Mic STT Activation */}
+              <Button
+                type="button"
+                onClick={toggleListening}
+                variant="outline"
+                className={`rounded-xl px-4 py-5 h-auto ${isListening ? 'border-accent bg-accent/10 text-accent' : 'border-border/80'}`}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+
               <Input
                 placeholder="Ask the coach to design a roadmap, review your habits..."
                 value={input}

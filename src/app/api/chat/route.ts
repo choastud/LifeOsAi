@@ -4,7 +4,7 @@ import { sendToGrok, GrokMessage } from '@/lib/grok';
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages, userId } = await handleRequestData(request);
+    const { messages, userId, sessionId } = await handleRequestData(request);
     
     // 1. Get user context if logged in
     const supabase = await createClient();
@@ -45,11 +45,15 @@ export async function POST(request: NextRequest) {
     // 4. Save chat log to DB if Supabase is connected
     if (supabase && userId) {
       const lastUserMsg = messages[messages.length - 1]?.content || '';
-      await supabase.from('chats').insert({
+      const insertData: any = {
         user_id: userId,
         message: lastUserMsg,
         response: responseText
-      });
+      };
+      if (sessionId) {
+        insertData.session_id = sessionId;
+      }
+      await supabase.from('chats').insert(insertData);
     }
 
     return NextResponse.json({ response: responseText });
@@ -63,6 +67,6 @@ async function handleRequestData(request: NextRequest) {
   try {
     return await request.json();
   } catch {
-    return { messages: [], userId: null };
+    return { messages: [], userId: null, sessionId: null };
   }
 }

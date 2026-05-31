@@ -14,10 +14,20 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- CHAT SESSIONS (Multi-thread chat sessions)
+CREATE TABLE IF NOT EXISTS public.chat_sessions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    title TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- CHATS (History of user interaction with Grok AI)
 CREATE TABLE IF NOT EXISTS public.chats (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    session_id UUID REFERENCES public.chat_sessions(id) ON DELETE CASCADE,
     message TEXT NOT NULL,
     response TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -91,6 +101,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_profiles_modtime BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER update_chat_sessions_modtime BEFORE UPDATE ON public.chat_sessions FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER update_goals_modtime BEFORE UPDATE ON public.goals FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER update_tasks_modtime BEFORE UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER update_journal_entries_modtime BEFORE UPDATE ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION update_modified_column();
@@ -99,6 +110,7 @@ CREATE TRIGGER update_learning_plans_modtime BEFORE UPDATE ON public.learning_pl
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
@@ -109,6 +121,9 @@ ALTER TABLE public.learning_plans ENABLE ROW LEVEL SECURITY;
 -- Policies (Ensure users can only access their own data)
 CREATE POLICY "Users can view and edit own profile" ON public.profiles
     FOR ALL USING (auth.uid() = id);
+
+CREATE POLICY "Users can manage own chat sessions" ON public.chat_sessions
+    FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can manage own chats" ON public.chats
     FOR ALL USING (auth.uid() = user_id);
