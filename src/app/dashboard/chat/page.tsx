@@ -59,10 +59,11 @@ export default function ChatPage() {
 
   // Voice Bot states
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
 
-  // Initialize Speech Recognition
+  // Initialize Speech Recognition & Preload voices
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -74,7 +75,27 @@ export default function ChatPage() {
         
         rec.onstart = () => setIsListening(true);
         rec.onend = () => setIsListening(false);
+        rec.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+          if (event.error === 'not-allowed') {
+            toast.error('Microphone access denied. Please click the lock icon in your browser address bar and allow microphone permissions.');
+          } else {
+            toast.error('Voice input error: ' + event.error);
+          }
+        };
         setRecognition(rec);
+      }
+
+      // Preload SpeechSynthesis voices to fix Chrome/Safari lag
+      if (window.speechSynthesis) {
+        const loadVoices = () => {
+          window.speechSynthesis.getVoices();
+        };
+        loadVoices();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
       }
     }
   }, []);
@@ -82,17 +103,39 @@ export default function ChatPage() {
   // Speak Text aloud using SpeechSynthesis
   const speakText = (text: string) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // cancel current speech
+      window.speechSynthesis.cancel(); // cancel any active speech
       
-      const cleaned = text.replace(/[#*`_\[\]]/g, ''); // strip markdown
+      // Clean up string thoroughly for natural dialogue and remove annoying characters
+      let cleaned = text
+        .replace(/[#*`_\[\]]/g, '')       // strip markdown symbols
+        .replace(/-\s+/g, ' ')            // remove list bullet dashes
+        .replace(/\d+\.\s+/g, ' ')        // remove numbers like "1. ", "2. "
+        .replace(/([A-Z]{2,})/g, ' ')     // replace multiple upper case tags
+        .replace(/:\s+/g, ', ')           // turn colons into natural comma pauses
+        .replace(/\n+/g, ' ')             // strip newline returns
+        .trim();
+
       const utterance = new SpeechSynthesisUtterance(cleaned);
       
+      // Select best voice profile
       const voices = window.speechSynthesis.getVoices();
-      // Try to find a premium/natural sounding voice
-      const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
+      const preferredVoice = 
+        voices.find(v => v.name.includes('Google US English') || v.name.includes('Google UK English Female')) ||
+        voices.find(v => v.lang.startsWith('en') && v.name.includes('Natural')) ||
+        voices.find(v => v.lang.startsWith('en') && v.name.includes('Zira') || v.name.includes('David')) ||
+        voices.find(v => v.lang.startsWith('en')) || 
+        voices[0];
+
       if (preferredVoice) {
         utterance.voice = preferredVoice;
       }
+      
+      utterance.rate = 1.0; 
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
       
       window.speechSynthesis.speak(utterance);
     }
@@ -105,6 +148,7 @@ export default function ChatPage() {
         window.speechSynthesis.cancel();
       }
       setVoiceEnabled(false);
+      setIsSpeaking(false);
       toast.info('Voice feedback disabled');
     } else {
       setVoiceEnabled(true);
@@ -123,6 +167,12 @@ export default function ChatPage() {
     if (isListening) {
       recognition.stop();
     } else {
+      // Cancel speech synthesis if active before starting to listen
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
+      
       recognition.onresult = (event: any) => {
         const text = event.results[0][0].transcript;
         setInput(text);
@@ -169,7 +219,6 @@ export default function ChatPage() {
   // Load messages for active session
   useEffect(() => {
     if (!activeSessionId) {
-      // Set a generic coach greeting on new empty chat
       const welcome: Message = {
         role: 'assistant',
         content: `Hello ${user?.name?.split(' ')[0] || 'User'}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
@@ -301,7 +350,7 @@ export default function ChatPage() {
         }
       } catch {
         setLoading(false);
-        toast.error('Failed to get mock response.');
+        toast.error('Failed to get response.');
       }
       return;
     }
@@ -374,6 +423,7 @@ export default function ChatPage() {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    setIsSpeaking(false);
     setActiveSessionId(null);
     setMessages([]);
   };
@@ -443,7 +493,7 @@ export default function ChatPage() {
             <Button
               onClick={startNewChat}
               variant="outline"
-              className="w-full justify-start gap-2 border-dashed border-primary/40 hover:border-primary rounded-xl py-5 font-semibold text-xs"
+              className="w-full justify-start gap-2 border-dashed border-primary/40 hover:border-primary rounded-xl py-5 font-semibold text-xs transition-all duration-300 hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4 text-accent" />
               <span>New Conversation</span>
@@ -470,7 +520,7 @@ export default function ChatPage() {
                       key={s.id}
                       className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all duration-200 ${
                         isActive
-                          ? 'border-primary/50 bg-primary/5 text-primary'
+                          ? 'border-primary/50 bg-primary/5 text-primary shadow-sm'
                           : 'border-transparent bg-background/30 text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
                       }`}
                     >
@@ -540,7 +590,7 @@ export default function ChatPage() {
                 onClick={toggleVoiceFeedback}
                 variant="ghost"
                 size="icon"
-                className={`h-7 w-7 rounded-lg ${voiceEnabled ? 'text-accent bg-accent/10' : 'text-muted-foreground'}`}
+                className={`h-7 w-7 rounded-lg transition-all ${voiceEnabled ? 'text-accent bg-accent/10 scale-105' : 'text-muted-foreground hover:bg-secondary'}`}
               >
                 {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </Button>
@@ -556,14 +606,92 @@ export default function ChatPage() {
       {/* Main chat window */}
       <div className="lg:col-span-9 flex flex-col h-full">
         <Card className="glass-card border-border/40 flex flex-col h-full overflow-hidden shadow-sm">
+          {/* Glowing Status Header & AI Orb */}
+          <div className="px-5 py-3 border-b border-border/40 bg-secondary/15 flex items-center justify-between">
+            <div className="flex items-center gap-3 text-left">
+              {/* Pulse Glowing AI Orb */}
+              <div className="relative flex items-center justify-center w-8 h-8">
+                {/* Glow backdrop layer */}
+                <motion.div
+                  animate={{
+                    scale: isListening ? [1, 1.45, 1] : isSpeaking ? [1, 1.3, 1] : loading ? [1, 1.2, 1] : [1, 1.1, 1],
+                    opacity: isListening || isSpeaking || loading ? [0.4, 0.85, 0.4] : [0.2, 0.4, 0.2]
+                  }}
+                  transition={{
+                    duration: isListening ? 1.0 : isSpeaking ? 1.5 : loading ? 2.0 : 3.0,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className={`absolute inset-0 rounded-full blur-md ${
+                    isListening 
+                      ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]' 
+                      : isSpeaking 
+                        ? 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.6)]' 
+                        : loading 
+                          ? 'bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)]' 
+                          : 'bg-accent/80'
+                  }`}
+                />
+                
+                {/* Visual Glass Orb Core */}
+                <motion.div
+                  animate={isListening || isSpeaking || loading ? {
+                    scale: [0.95, 1.05, 0.95],
+                    rotate: 360
+                  } : {}}
+                  transition={{ 
+                    scale: { duration: 2, repeat: Infinity }, 
+                    rotate: { duration: 15, repeat: Infinity, ease: 'linear' } 
+                  }}
+                  className={`w-5 h-5 rounded-full border shadow-md relative z-10 flex items-center justify-center backdrop-blur-xl ${
+                    isListening 
+                      ? 'bg-gradient-to-tr from-rose-400 via-rose-500 to-rose-600 border-rose-300' 
+                      : isSpeaking 
+                        ? 'bg-gradient-to-tr from-amber-400 via-amber-500 to-amber-600 border-amber-300' 
+                        : loading 
+                          ? 'bg-gradient-to-tr from-indigo-400 via-indigo-500 to-indigo-600 border-indigo-300' 
+                          : 'bg-gradient-to-tr from-accent via-accent/80 to-primary/80 border-primary/20'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
+                  <span>AI Life Coach</span>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                </h3>
+                <p className="text-[10px] text-muted-foreground font-semibold">
+                  {isListening 
+                    ? 'Listening carefully...' 
+                    : isSpeaking 
+                      ? 'Speaking aloud...' 
+                      : loading 
+                        ? 'Formulating roadmap...' 
+                        : 'Ready to converse'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={toggleVoiceFeedback}
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 rounded-lg transition-colors ${voiceEnabled ? 'text-accent bg-accent/10' : 'text-muted-foreground'}`}
+              >
+                {voiceEnabled ? <Volume2 className="w-3.5 h-3.5 animate-bounce" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+          </div>
+
           {/* Messages block / Empty Chat Panel */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-background/20 select-text">
             {messages.length <= 1 && !activeSessionId ? (
               // ChatGPT-style empty landing layout
               <div className="h-full flex flex-col items-center justify-center max-w-xl mx-auto text-center space-y-8 select-none">
                 <div className="space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto text-primary shadow-inner">
-                    <Brain className="w-8 h-8 text-accent animate-pulse" />
+                  <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto text-primary shadow-inner animate-float">
+                    <Brain className="w-8 h-8 text-accent" />
                   </div>
                   <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
                     How can I help you today, {user?.name?.split(' ')[0]}?
@@ -579,7 +707,7 @@ export default function ChatPage() {
                       key={i}
                       onClick={() => handleSend(p)}
                       disabled={loading}
-                      className="text-xs text-left p-4 rounded-2xl border border-border/80 bg-background/85 hover:bg-primary/5 hover:text-primary transition-all duration-200 leading-normal font-semibold text-foreground/80 hover:border-primary/50 shadow-sm"
+                      className="text-xs text-left p-4 rounded-2xl border border-border/80 bg-background/85 hover:bg-primary/5 hover:text-primary transition-all duration-300 leading-normal font-semibold text-foreground/80 hover:border-primary/50 shadow-sm hover:scale-[1.02] hover:shadow-md"
                     >
                       "{p}"
                     </button>
@@ -602,7 +730,7 @@ export default function ChatPage() {
                         {msg.role === 'user' ? user?.name[0] : <Brain className="w-4 h-4" />}
                       </div>
                       
-                      <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm text-left leading-relaxed ${
+                      <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm text-left leading-relaxed transition-all duration-300 hover:shadow-md ${
                         msg.role === 'user'
                           ? 'bg-primary text-primary-foreground rounded-tr-none'
                           : 'bg-background/80 border border-border/40 text-foreground rounded-tl-none whitespace-pre-wrap font-medium space-y-3'
@@ -641,11 +769,21 @@ export default function ChatPage() {
             {/* Listening Wave feedback */}
             {isListening && (
               <div className="flex items-center gap-1.5 px-3 py-1">
-                <div className="w-1.5 h-3 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1.5 h-4.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-1.5 h-2.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                <div className="w-1.5 h-3.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '450ms' }} />
-                <span className="text-[10px] font-bold text-accent animate-pulse ml-1.5 uppercase tracking-wider">Listening to speech...</span>
+                <motion.div animate={{ height: [8, 16, 8] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.0 }} className="w-1.5 bg-rose-500 rounded-full" />
+                <motion.div animate={{ height: [10, 24, 10] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.15 }} className="w-1.5 bg-rose-500 rounded-full" />
+                <motion.div animate={{ height: [6, 14, 6] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.3 }} className="w-1.5 bg-rose-500 rounded-full" />
+                <motion.div animate={{ height: [9, 19, 9] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.45 }} className="w-1.5 bg-rose-500 rounded-full" />
+                <span className="text-[10px] font-extrabold text-rose-500 animate-pulse ml-1.5 uppercase tracking-wider">Listening to speech...</span>
+              </div>
+            )}
+
+            {/* Speaking Wave feedback */}
+            {isSpeaking && (
+              <div className="flex items-center gap-1.5 px-3 py-1">
+                <motion.div animate={{ scaleY: [1, 2, 1] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.0 }} className="w-1 h-3.5 bg-amber-500 rounded-full origin-center" />
+                <motion.div animate={{ scaleY: [1, 2.5, 1] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.2 }} className="w-1 h-3.5 bg-amber-500 rounded-full origin-center" />
+                <motion.div animate={{ scaleY: [1, 1.8, 1] }} transition={{ duration: 0.8, repeat: Infinity, delay: 0.4 }} className="w-1 h-3.5 bg-amber-500 rounded-full origin-center" />
+                <span className="text-[10px] font-extrabold text-amber-500 animate-pulse ml-1.5 uppercase tracking-wider">AI is speaking...</span>
               </div>
             )}
 
@@ -661,9 +799,9 @@ export default function ChatPage() {
                 type="button"
                 onClick={toggleListening}
                 variant="outline"
-                className={`rounded-xl px-4 py-5 h-auto ${isListening ? 'border-accent bg-accent/10 text-accent' : 'border-border/80'}`}
+                className={`rounded-xl px-4 py-5 h-auto transition-all duration-300 ${isListening ? 'border-rose-500 bg-rose-500/10 text-rose-500 scale-105 shadow-sm' : 'border-border/80 hover:bg-secondary'}`}
               >
-                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {isListening ? <MicOff className="w-4 h-4 text-rose-500" /> : <Mic className="w-4 h-4" />}
               </Button>
 
               <Input
@@ -676,7 +814,7 @@ export default function ChatPage() {
               <Button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-4 py-5 h-auto"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-4 py-5 h-auto transition-all duration-300 hover:scale-[1.02]"
               >
                 <Send className="w-4 h-4" />
               </Button>
