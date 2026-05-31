@@ -76,10 +76,16 @@ export default function ChatPage() {
         rec.onstart = () => setIsListening(true);
         rec.onend = () => setIsListening(false);
         rec.onerror = (event: any) => {
-          console.error('Speech recognition error', event.error);
+          console.error('Speech recognition error:', event.error);
           setIsListening(false);
+          
           if (event.error === 'not-allowed') {
             toast.error('Microphone access denied. Please click the lock icon in your browser address bar and allow microphone permissions.');
+          } else if (event.error === 'network') {
+            toast.warning('Voice recognition network timeout. Please verify your internet connection, or type your message directly.');
+          } else if (event.error === 'no-speech') {
+            // Silently handle if user just pauses and doesn't speak immediately
+            console.log('Voice session ended: No speech detected.');
           } else {
             toast.error('Voice input error: ' + event.error);
           }
