@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useThemeStore } from '@/stores/theme-store';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,14 @@ import { User, ShieldAlert, Sliders, Database, ArrowDownToLine, Trash2, Check, S
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
-  const { user, isDemo, logout } = useAuth();
+  const { user, isDemo, logout, refreshUser } = useAuth();
+  // Sync form fields when user data updates
+  useEffect(() => {
+    if (user) {
+      setName(user.name ?? '');
+      setEmail(user.email ?? '');
+    }
+  }, [user]);
   const { theme, toggleTheme } = useThemeStore();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -32,24 +39,49 @@ export default function SettingsPage() {
         email
       };
       localStorage.setItem('lifeos_demo_user', JSON.stringify(mockUser));
+      try {
+        await refreshUser();
+      } catch (e) {
+        console.error('Failed to refresh user in demo mode', e);
+      }
       setLoading(false);
       toast.success('Profile updated offline');
       return;
     }
 
-    try {
-      const { error } = await supabase!
-        .from('profiles')
-        .update({ name })
-        .eq('id', user?.id);
-
-      if (error) throw error;
-      toast.success('Profile details updated');
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
+      // Ensure we have a valid user ID before attempting update
+      if (!user?.id) {
+        toast.error('User ID missing – cannot update profile');
+        setLoading(false);
+        return;
+      }
+      console.log('Updating profile for user ID:', user.id, 'with name:', name);
+      try {
+        const { data, error } = await supabase!
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            name,
+            email: user.email,
+            updated_at: new Date().toISOString()
+          });
+        if (error) {
+          console.error('Supabase update error:', error);
+          throw error;
+        }
+        console.log('Supabase update response data:', data);
+        toast.success('Profile details updated');
+        // Refresh AuthContext to reflect new name immediately
+        try {
+          await refreshUser();
+        } catch (e) {
+          console.error('Failed to refresh user after profile update', e);
+        }
+      } catch (err: any) {
+        toast.error(err.message);
+      } finally {
+        setLoading(false);
+      }
   };
 
   const handleExportData = () => {

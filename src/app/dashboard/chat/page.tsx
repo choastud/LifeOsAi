@@ -24,11 +24,13 @@ import {
   X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatMessage from '@/components/chat-message';
 import { toast } from 'sonner';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  timestamp?: string;
 }
 
 interface ChatSession {
@@ -61,6 +63,9 @@ export default function ChatPage() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
+const [retryCount, setRetryCount] = useState(0);
   const [recognition, setRecognition] = useState<any>(null);
 
   // Initialize Speech Recognition & Preload voices
@@ -76,17 +81,31 @@ export default function ChatPage() {
         rec.onstart = () => setIsListening(true);
         rec.onend = () => setIsListening(false);
         rec.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
           setIsListening(false);
           
           if (event.error === 'not-allowed') {
+            console.warn('Speech recognition: Microphone access blocked.');
             toast.error('Microphone access denied. Please click the lock icon in your browser address bar and allow microphone permissions.');
           } else if (event.error === 'network') {
-            toast.warning('Voice recognition network timeout. Please verify your internet connection, or type your message directly.');
+            console.debug(`Speech recognition network error (attempt ${retryCount + 1} of ${MAX_RETRIES})`);
+            toast.info('Temporary network issue, retrying...');
+            if (retryCount < MAX_RETRIES) {
+              setRetryCount(prev => prev + 1);
+              setTimeout(() => {
+                try {
+                  recognition?.abort?.();
+                  recognition?.start?.();
+                } catch (e) {
+                  console.error('Failed to restart recognition:', e);
+                }
+              }, RETRY_DELAY_MS);
+            } else {
+              toast.error('Voice recognition failed after multiple attempts. Please check your connection.');
+            }
           } else if (event.error === 'no-speech') {
-            // Silently handle if user just pauses and doesn't speak immediately
             console.log('Voice session ended: No speech detected.');
           } else {
+            console.error('Speech recognition error:', event.error);
             toast.error('Voice input error: ' + event.error);
           }
         };
@@ -104,48 +123,56 @@ export default function ChatPage() {
         }
       }
     }
-  }, []);
+  }, [retryCount]);
 
   // Speak Text aloud using SpeechSynthesis
-  const speakText = (text: string) => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // cancel any active speech
-      
+  // Helper to strip markdown symbols and extra whitespace for clean spoken/ displayed text
+function sanitizeDisplay(text: string): string {
+  // Remove markdown symbols but keep line breaks for readability
+  return text
+    .replace(/[#*`_\[\]\\]/g, '')
+    .replace(/\n{2,}/g, '\n') // collapse multiple newlines to a single newline
+    .replace(/\s{2,}/g, ' ')      // collapse extra spaces
+    .trim();
+}
+
+// Speak Text aloud using SpeechSynthesis
+const speakText = (text: string) => {
+  if (!text) return;
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    // Cancel any ongoing speech to avoid overlap
+    window.speechSynthesis.cancel();
+    try {
       // Clean up string thoroughly for natural dialogue and remove annoying characters
       let cleaned = text
-        .replace(/[#*`_\[\]]/g, '')       // strip markdown symbols
-        .replace(/-\s+/g, ' ')            // remove list bullet dashes
-        .replace(/\d+\.\s+/g, ' ')        // remove numbers like "1. ", "2. "
-        .replace(/([A-Z]{2,})/g, ' ')     // replace multiple upper case tags
-        .replace(/:\s+/g, ', ')           // turn colons into natural comma pauses
-        .replace(/\n+/g, ' ')             // strip newline returns
+        .replace(/[#*`_\[\]\\]/g, '') // strip markdown symbols
+        .replace(/-\s+/g, ' ') // remove list bullet dashes
+        .replace(/\d+\.\s+/g, ' ') // remove numbers like "1. ", "2. "
+        .replace(/([A-Z]{2,})/g, ' ') // replace multiple upper case tags
+        .replace(/:\s+/g, ', ') // turn colons into natural comma pauses
+        .replace(/\n+/g, '\n') // preserve line breaks
         .trim();
 
       const utterance = new SpeechSynthesisUtterance(cleaned);
-      
-      // Select best voice profile
       const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = 
+      const preferredVoice =
         voices.find(v => v.name.includes('Google US English') || v.name.includes('Google UK English Female')) ||
         voices.find(v => v.lang.startsWith('en') && v.name.includes('Natural')) ||
-        voices.find(v => v.lang.startsWith('en') && v.name.includes('Zira') || v.name.includes('David')) ||
-        voices.find(v => v.lang.startsWith('en')) || 
+        voices.find(v => v.lang.startsWith('en') && (v.name.includes('Zira') || v.name.includes('David'))) ||
+        voices.find(v => v.lang.startsWith('en')) ||
         voices[0];
-
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-      
-      utterance.rate = 1.0; 
+      if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.rate = 1.0;
       utterance.pitch = 1.0;
-
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = () => setIsSpeaking(false);
-      
       window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error('Speech synthesis error:', e);
     }
-  };
+  }
+};
 
   // Toggle speech output
   const toggleVoiceFeedback = () => {
@@ -173,18 +200,19 @@ export default function ChatPage() {
     if (isListening) {
       recognition.stop();
     } else {
-      // Cancel speech synthesis if active before starting to listen
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-      }
-      
-      recognition.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setInput(text);
-        handleSend(text);
-      };
-      recognition.start();
+        // Cancel speech synthesis if active before starting to listen
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+        }
+
+        recognition.onresult = (event: any) => {
+          const text = event.results[0][0].transcript;
+          setInput(text);
+          handleSend(text);
+        };
+        setRetryCount(0);
+        recognition.start();
     }
   };
 
@@ -227,7 +255,8 @@ export default function ChatPage() {
     if (!activeSessionId) {
       const welcome: Message = {
         role: 'assistant',
-        content: `Hello ${user?.name?.split(' ')[0] || 'User'}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`
+        content: `Hello ${user?.name?.split(' ')[0] || 'User'}! I am your AI Life Coach. Tell me what goals you are chasing, or log your reflections, and I will structure action roadmaps and memories for you.`,
+        timestamp: new Date().toISOString()
       };
       setMessages([welcome]);
       return;
@@ -318,7 +347,7 @@ export default function ChatPage() {
       }
     }
 
-    const userMessage: Message = { role: 'user', content: text };
+    const userMessage: Message = { role: 'user', content: text, timestamp: new Date().toISOString() };
     const updatedMessages = [...messages.filter(m => m.content), userMessage];
     
     setMessages(updatedMessages);
@@ -344,7 +373,7 @@ export default function ChatPage() {
         setLoading(false);
 
         if (data.response) {
-          const aiMessage: Message = { role: 'assistant', content: data.response };
+          const aiMessage: Message = { role: 'assistant', content: data.response, timestamp: new Date().toISOString() };
           const finalMessages = [...updatedMessages, aiMessage];
           setMessages(finalMessages);
           localStorage.setItem(`lifeos_chat_logs_${currentSessionId}`, JSON.stringify(finalMessages));
@@ -404,7 +433,6 @@ export default function ChatPage() {
       if (aiReply.includes('Figma')) {
         const added = [
           ...existing,
-          { id: Math.random().toString(), title: 'Learn Figma & Design 3 Wireframes', progress: 0, deadline: '2026-06-15', status: 'active' },
           { id: Math.random().toString(), title: 'Write a Product Requirement Document (PRD)', progress: 0, deadline: '2026-07-01', status: 'active' }
         ];
         localStorage.setItem('lifeos_goals', JSON.stringify(added));
@@ -493,13 +521,13 @@ export default function ChatPage() {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8.5rem)]">
       {/* Sidebar Chat Sessions List */}
       <div className="hidden lg:block lg:col-span-3 h-full">
-        <Card className="glass-card border-border/40 h-full p-4 flex flex-col justify-between">
+        <Card className="glass-card glass-panel border-border/40 h-full p-4 flex flex-col justify-between">
           <div className="space-y-4 overflow-hidden flex flex-col flex-1">
             {/* New Chat Trigger */}
             <Button
               onClick={startNewChat}
               variant="outline"
-              className="w-full justify-start gap-2 border-dashed border-primary/40 hover:border-primary rounded-xl py-5 font-semibold text-xs transition-all duration-300 hover:scale-[1.02]"
+              className="w-full justify-start gap-2 border-dashed border-primary/40 hover:border-primary rounded-xl py-5 font-semibold text-xs transition-all duration-300 hover:scale-[1.02] glow-hover"
             >
               <Plus className="w-4 h-4 text-accent" />
               <span>New Conversation</span>
@@ -557,7 +585,7 @@ export default function ChatPage() {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {isEditing ? (
                           <>
-                            <button onClick={() => renameSession(s.id, editingTitle)} className="p-0.5 hover:bg-primary/20 rounded">
+                            <button onClick={() => renameSession(s.id, editingTitle)} className="p-0.5 hover:bg-primary/20 rounded glow-hover">
                               <Check className="w-3 h-3 text-emerald-600" />
                             </button>
                             <button onClick={() => setEditingSessionId(null)} className="p-0.5 hover:bg-primary/20 rounded">
@@ -571,11 +599,11 @@ export default function ChatPage() {
                                 setEditingSessionId(s.id);
                                 setEditingTitle(s.title);
                               }}
-                              className="p-1 hover:bg-secondary rounded"
+                              className="p-1 hover:bg-secondary rounded glow-hover"
                             >
                               <Edit2 className="w-3 h-3" />
                             </button>
-                            <button onClick={() => deleteSession(s.id)} className="p-1 hover:bg-secondary rounded hover:text-destructive">
+                            <button onClick={() => deleteSession(s.id)} className="p-1 hover:bg-secondary rounded hover:text-destructive glow-hover">
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </>
@@ -589,7 +617,7 @@ export default function ChatPage() {
           </div>
 
           {/* Voice Controls Panel at bottom */}
-          <div className="pt-4 border-t border-border/40 space-y-3">
+          <div className="pt-4 border-t border-border/40 space-y-3 glass-panel">
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-muted-foreground">Voice Assistant</span>
               <Button
@@ -721,52 +749,47 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              <AnimatePresence initial={false}>
-                {messages.map((msg, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`flex items-start gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                        msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-accent/20 text-accent-foreground'
-                      }`}>
-                        {msg.role === 'user' ? user?.name[0] : <Brain className="w-4 h-4" />}
-                      </div>
-                      
-                      <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm text-left leading-relaxed transition-all duration-300 hover:shadow-md ${
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground rounded-tr-none'
-                          : 'bg-background/80 border border-border/40 text-foreground rounded-tl-none whitespace-pre-wrap font-medium space-y-3'
-                      }`}>
-                        {msg.content}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-
-                {loading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex justify-start"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-accent/20 text-accent-foreground flex items-center justify-center">
-                        <Brain className="w-4 h-4 animate-bounce" />
-                      </div>
-                      <div className="bg-background/80 border border-border/40 rounded-2xl rounded-tl-none px-4 py-3.5 flex items-center gap-1.5 shadow-sm">
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            )}
+              
+            <>
+  {messages.map((msg, i) => {
+    const prev = i > 0 ? messages[i-1] : null;
+    const showDate = !prev || new Date(prev.timestamp || '').toDateString() !== new Date(msg.timestamp || '').toDateString();
+    return (
+      <>
+        {showDate && (
+          <div className="text-center text-xs text-muted-foreground py-2">
+            {new Date(msg.timestamp || '').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+          </div>
+        )}
+        <ChatMessage
+          key={i}
+          role={msg.role}
+          content={sanitizeDisplay(msg.content)}
+          timestamp={msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+        />
+      </>
+    );
+  })}
+  {loading && (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex justify-start"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-accent/20 text-accent-foreground flex items-center justify-center">
+          <Brain className="w-4 h-4 animate-bounce" />
+        </div>
+        <div className="bg-background/80 border border-border/40 rounded-2xl rounded-tl-none px-4 py-3.5 flex items-center gap-1.5 shadow-sm">
+          <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+    </motion.div>
+  )}
+</>
+)}
             <div ref={messagesEndRef} />
           </div>
 

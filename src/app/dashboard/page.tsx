@@ -280,32 +280,44 @@ export default function DashboardHome() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Active Goals"
-          value={goalsCount}
-          icon={<Target className="w-5 h-5 text-amber-500" />}
-          description="Aligned long-term ambitions"
-          trend={{ value: 12, isPositive: true }}
-        />
-        <StatsCard
-          title="AI Memory Nodes"
-          value={memoriesCount}
-          icon={<Sparkles className="w-5 h-5 text-indigo-500" />}
-          description="Extracted preferences & facts"
-          trend={{ value: 25, isPositive: true }}
-        />
-        <StatsCard
-          title="Learning Plans"
-          value={learningCount}
-          icon={<BookOpen className="w-5 h-5 text-emerald-500" />}
-          description="Skill building roadmaps"
-        />
-        <StatsCard
-          title="Journal Entries"
-          value={journalCount}
-          icon={<HeartPulse className="w-5 h-5 text-rose-500" />}
-          description="Emotional logs & mood tracker"
-        />
+        <Link href="/dashboard/goals" className="block cursor-pointer">
+          <StatsCard
+            title="Active Goals"
+            value={goalsCount}
+            icon={<Target className="w-5 h-5 text-amber-500" />}
+            description="Aligned long-term ambitions"
+            trend={{ value: 12, isPositive: true }}
+            className="cursor-pointer"
+          />
+        </Link>
+        <Link href="/dashboard/memories" className="block cursor-pointer">
+          <StatsCard
+            title="AI Memory Nodes"
+            value={memoriesCount}
+            icon={<Sparkles className="w-5 h-5 text-indigo-500" />}
+            description="Extracted preferences & facts"
+            trend={{ value: 25, isPositive: true }}
+            className="cursor-pointer"
+          />
+        </Link>
+        <Link href="/dashboard/learning" className="block cursor-pointer">
+          <StatsCard
+            title="Learning Plans"
+            value={learningCount}
+            icon={<BookOpen className="w-5 h-5 text-emerald-500" />}
+            description="Skill building roadmaps"
+            className="cursor-pointer"
+          />
+        </Link>
+        <Link href="/dashboard/journal" className="block cursor-pointer">
+          <StatsCard
+            title="Journal Entries"
+            value={journalCount}
+            icon={<HeartPulse className="w-5 h-5 text-rose-500" />}
+            description="Emotional logs & mood tracker"
+            className="cursor-pointer"
+          />
+        </Link>
       </div>
 
       {/* AI Daily Briefing Panel */}
@@ -335,7 +347,7 @@ export default function DashboardHome() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm leading-relaxed text-foreground text-left font-medium">
-                  “Alex, today's primary focus should be finishing the <strong>Next.js Fullstack Web App</strong>. You're currently at 80% progress with a deadline approaching in 15 days. Based on your memory vault, you study best in focused morning blocks. I suggest reserving 9:00 AM - 11:30 AM today for coding. Also, remember to step away from screens by 10:30 PM tonight to improve sleep consistency, which you noted as a concern in your recent journal logs.”
+                  “{user?.name?.split(' ')[0] || 'User'}, today's primary focus should be finishing the <strong>Next.js Fullstack Web App</strong>. You're currently at 80% progress with a deadline approaching in 15 days. Based on your memory vault, you study best in focused morning blocks. I suggest reserving 9:00 AM - 11:30 AM today for coding. Also, remember to step away from screens by 10:30 PM tonight to improve sleep consistency, which you noted as a concern in your recent journal logs.”
                 </p>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">
                   <span className="text-[11px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">⚡ Action: Code Next.js layout (2h)</span>

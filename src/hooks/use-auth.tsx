@@ -22,6 +22,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   startDemoMode: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +32,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
+
+  const refreshUser = async () => {
+    const hasDemoCookie = typeof document !== 'undefined' && document.cookie.split('; ').find(row => row.startsWith('lifeos_demo_mode='))?.split('=')[1] === 'true';
+    if (!isSupabaseConfigured || hasDemoCookie) {
+      const demoUserRaw = localStorage.getItem('lifeos_demo_user');
+      if (demoUserRaw) {
+        setUser(JSON.parse(demoUserRaw));
+      }
+      return;
+    }
+
+    if (!supabase) return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        const refreshedUser: UserProfile = {
+          id: session.user.id,
+          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
+          theme: profile?.theme || 'light',
+          created_at: session.user.created_at
+        };
+        setUser(refreshedUser);
+      } else {
+        setUser(null);
+      }
+    } catch (e) {
+      console.error('Error refreshing user:', e);
+    }
+  };
 
   useEffect(() => {
     // Check if we are in demo mode from cookies or localStorage
@@ -165,8 +203,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('lifeos_demo_user');
       setIsDemo(false);
 
-      const { error } = await supabase!.auth.signInWithPassword({ email, password });
+      const { data: { session }, error } = await supabase!.auth.signInWithPassword({ email, password });
       if (error) return { error: error.message };
+
+      // Fetch user profile after successful sign‑in
+      if (session?.user) {
+        const { data: profile } = await supabase!
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        const loggedInUser: UserProfile = {
+          id: session.user.id,
+          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
+          theme: profile?.theme || 'light',
+          created_at: session.user.created_at
+        };
+        setUser(loggedInUser);
+      } else {
+        setUser(null);
+      }
+
+      // Refresh user data to ensure latest profile is loaded
+      try {
+        await refreshUser();
+      } catch (e) {
+        console.error('Failed to refresh after login', e);
+      }
       router.push('/dashboard');
       return { error: null };
     } catch (err: any) {
@@ -189,6 +254,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.cookie = 'lifeos_demo_mode=true; path=/; max-age=31536000';
       setUser(mockUser);
       setIsDemo(true);
+      // Refresh user data after sign‑up
+      try {
+        await refreshUser();
+      } catch (e) {
+        console.error('Failed to refresh after sign‑up', e);
+      }
       router.push('/dashboard');
       return { error: null };
     }
@@ -199,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('lifeos_demo_user');
       setIsDemo(false);
 
-      const { error } = await supabase!.auth.signUp({
+      const { data: { session }, error } = await supabase!.auth.signUp({
         email,
         password,
         options: {
@@ -209,6 +280,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
       if (error) return { error: error.message };
+
+      // Fetch profile after successful sign‑up
+      if (session?.user) {
+        const { data: profile } = await supabase!
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        const newUser: UserProfile = {
+          id: session.user.id,
+          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
+          theme: profile?.theme || 'light',
+          created_at: session.user.created_at
+        };
+        setUser(newUser);
+      }
+
       router.push('/dashboard');
       return { error: null };
     } catch (err: any) {
@@ -268,7 +358,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isDemo, login, signUp, loginWithGoogle, logout, startDemoMode }}>
+    <AuthContext.Provider value={{ user, loading, isDemo, login, signUp, loginWithGoogle, logout, startDemoMode, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
