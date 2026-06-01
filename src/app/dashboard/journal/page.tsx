@@ -32,7 +32,7 @@ export default function JournalPage() {
   const { user, isDemo } = useAuth();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [content, setContent] = useState('');
-  const [selectedMood, setSelectedMood] = useState('productive');
+  const [selectedMood, setSelectedMood] = useState('calm');
   const [loading, setLoading] = useState(true);
   const [addLoading, setAddLoading] = useState(false);
   const [activeEntry, setActiveEntry] = useState<JournalEntry | null>(null);
@@ -177,32 +177,11 @@ export default function JournalPage() {
               <span>Log Daily Reflection</span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground mt-0.5">
-              Write your thoughts, log your mood, and receive instant coaching insights.
+              Write your thoughts and receive instant coaching insights.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2 text-left">
-                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Your Current Mood</label>
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {MOODS.map((m) => (
-                    <button
-                      key={m.value}
-                      type="button"
-                      onClick={() => setSelectedMood(m.value)}
-                      className={`flex flex-col items-center justify-center p-2 border rounded-xl transition-all ${
-                        selectedMood === m.value
-                          ? 'border-primary bg-primary/10 text-foreground scale-105 shadow-sm font-bold'
-                          : 'border-border/80 bg-background/50 text-muted-foreground hover:bg-secondary'
-                      }`}
-                    >
-                      <span className="text-xl mb-1">{m.emoji}</span>
-                      <span className="text-[9px] uppercase font-extrabold tracking-wide">{m.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div className="space-y-1.5 text-left">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Journal Content</label>
                 <textarea
