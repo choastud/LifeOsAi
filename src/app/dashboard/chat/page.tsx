@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -755,19 +755,19 @@ const speakText = (text: string) => {
     const prev = i > 0 ? messages[i-1] : null;
     const showDate = !prev || new Date(prev.timestamp || '').toDateString() !== new Date(msg.timestamp || '').toDateString();
     return (
-      <>
+      <Fragment key={`msg-group-${i}`}>
         {showDate && (
           <div className="text-center text-xs text-muted-foreground py-2">
             {new Date(msg.timestamp || '').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
           </div>
         )}
         <ChatMessage
-          key={i}
+          key={`msg-${i}`}
           role={msg.role}
           content={sanitizeDisplay(msg.content)}
           timestamp={msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
         />
-      </>
+      </Fragment>
     );
   })}
   {loading && (
