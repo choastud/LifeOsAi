@@ -65,6 +65,36 @@ export default function DashboardHome() {
     planner: true
   });
 
+  const getDynamicBriefing = () => {
+    const firstName = user?.name?.split(' ')[0] || 'User';
+    if (activeGoals.length === 0) {
+      return `Hello ${firstName}! Welcome to your dashboard. You don't have any active priorities set up yet. Talk to your AI Mentor in the Chat tab or click 'Create New Goal' below to define your first ambition. Once set, I will outline your daily briefing here.`;
+    }
+    const primaryGoal = activeGoals[0];
+    const goalTitle = primaryGoal.title;
+    const progress = primaryGoal.progress;
+    let daysRemainingText = '';
+    if (primaryGoal.deadline) {
+      const diffTime = new Date(primaryGoal.deadline).getTime() - new Date().getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        daysRemainingText = ` with a deadline approaching in ${diffDays} days`;
+      } else if (diffDays === 0) {
+        daysRemainingText = ` with the deadline today`;
+      } else {
+        daysRemainingText = ` (deadline has passed)`;
+      }
+    }
+    let memoryInsight = '';
+    if (recentMemories.length > 0) {
+      const topMemory = recentMemories[0].memory;
+      memoryInsight = ` Based on your memory vault, I recall: “${topMemory}”. I suggest focusing your morning energy on this priority today.`;
+    } else {
+      memoryInsight = ` Try consulting your AI Mentor to extract details about your learning preferences and add them to your memory vault.`;
+    }
+    return `${firstName}, today's primary focus should be making progress on your goal: '${goalTitle}'. You are currently at ${progress}% completion${daysRemainingText}.${memoryInsight}`;
+  };
+
   useEffect(() => {
     // 1. Calculate time-of-day greeting
     const hour = new Date().getHours();
@@ -347,11 +377,27 @@ export default function DashboardHome() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm leading-relaxed text-foreground text-left font-medium">
-                  “{user?.name?.split(' ')[0] || 'User'}, today's primary focus should be finishing the <strong>Next.js Fullstack Web App</strong>. You're currently at 80% progress with a deadline approaching in 15 days. Based on your memory vault, you study best in focused morning blocks. I suggest reserving 9:00 AM - 11:30 AM today for coding. Also, remember to step away from screens by 10:30 PM tonight to improve sleep consistency, which you noted as a concern in your recent journal logs.”
+                  “{getDynamicBriefing()}”
                 </p>
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">
-                  <span className="text-[11px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">⚡ Action: Code Next.js layout (2h)</span>
-                  <span className="text-[11px] font-semibold bg-accent/10 text-accent-foreground px-2.5 py-1 rounded-full">🧘 Goal: Screen-free after 10:30 PM</span>
+                  {activeGoals.length > 0 ? (
+                    <span className="text-[11px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                      ⚡ Priority: {activeGoals[0].title.substring(0, 40)}{activeGoals[0].title.length > 40 ? '...' : ''} ({activeGoals[0].progress}%)
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                      ⚡ Action: Define your first goal
+                    </span>
+                  )}
+                  {recentMemories.length > 0 ? (
+                    <span className="text-[11px] font-semibold bg-accent/10 text-accent-foreground px-2.5 py-1 rounded-full">
+                      🧠 Vault Tip: {recentMemories[0].memory.substring(0, 40)}{recentMemories[0].memory.length > 40 ? '...' : ''}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold bg-accent/10 text-accent-foreground px-2.5 py-1 rounded-full">
+                      🧠 Vault Tip: Chat to extract insights
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -392,7 +438,7 @@ export default function DashboardHome() {
                       <p className="text-xs text-muted-foreground py-4">No active priorities found. Start consulting the life coach!</p>
                     ) : (
                       activeGoals.map((g) => (
-                        <div key={g.id} className="space-y-2 border-b border-border/30 pb-3 last:border-b-0 last:pb-0">
+                        <Link href="/dashboard/goals" key={g.id} className="block space-y-2 border-b border-border/30 pb-3 last:border-b-0 last:pb-0 cursor-pointer hover:opacity-80 transition-opacity">
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-foreground truncate max-w-[70%] text-left">{g.title}</span>
                             <span className="font-bold text-accent">{g.progress}%</span>
@@ -407,7 +453,7 @@ export default function DashboardHome() {
                             </span>
                             <span className="capitalize">{g.status}</span>
                           </div>
-                        </div>
+                        </Link>
                       ))
                     )}
                   </CardContent>
@@ -522,7 +568,7 @@ export default function DashboardHome() {
                       <p className="text-xs text-muted-foreground py-4 text-left">No insights stored. Speak to the coach to save memories.</p>
                     ) : (
                       recentMemories.map((m) => (
-                        <div key={m.id} className="flex gap-2.5 items-start p-2.5 rounded-xl bg-background/50 border border-border/50">
+                        <Link href="/dashboard/memories" key={m.id} className="flex gap-2.5 items-start p-2.5 rounded-xl bg-background/50 border border-border/50 cursor-pointer hover:bg-secondary/40 transition-colors block">
                           <div className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0 animate-pulse" />
                           <div className="space-y-0.5 text-left">
                             <p className="text-xs text-foreground font-semibold leading-relaxed">“{m.memory}”</p>
@@ -530,7 +576,7 @@ export default function DashboardHome() {
                               {m.category}
                             </span>
                           </div>
-                        </div>
+                        </Link>
                       ))
                     )}
                   </CardContent>

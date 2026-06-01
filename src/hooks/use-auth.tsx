@@ -17,11 +17,11 @@ interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   isDemo: boolean;
-  login: (email: string, password: string) => Promise<{ error: string | null }>;
+  login: (email: string, password: string, name?: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
   loginWithGoogle: () => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
-  startDemoMode: () => void;
+  startDemoMode: (nameOrEvent?: any) => void;
   refreshUser: () => Promise<void>;
 }
 
@@ -178,12 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, name?: string) => {
     if (!isSupabaseConfigured) {
       // Mock login for demo mode
       const mockUser: UserProfile = {
         id: 'demo-user-id',
-        name: 'Alex Mercer',
+        name: name || 'User',
         email: email,
         avatar_url: '',
         theme: 'light',
@@ -208,6 +208,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Fetch user profile after successful sign‑in
       if (session?.user) {
+        if (name) {
+          await supabase!
+            .from('profiles')
+            .upsert({
+              id: session.user.id,
+              name,
+              email: session.user.email,
+              updated_at: new Date().toISOString()
+            });
+        }
+
         const { data: profile } = await supabase!
           .from('profiles')
           .select('*')
@@ -215,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
         const loggedInUser: UserProfile = {
           id: session.user.id,
-          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          name: profile?.name || name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
           email: session.user.email || '',
           avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
           theme: profile?.theme || 'light',
@@ -341,11 +352,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/');
   };
 
-  const startDemoMode = () => {
+  const startDemoMode = (nameOrEvent?: any) => {
+    const name = (nameOrEvent && typeof nameOrEvent === 'string') ? nameOrEvent : 'User';
     const mockUser: UserProfile = {
       id: 'demo-user-id',
-      name: 'Alex Mercer',
-      email: 'alex@lifeos.ai',
+      name: name,
+      email: 'demo@lifeos.ai',
       avatar_url: '',
       theme: 'light',
       created_at: new Date().toISOString()

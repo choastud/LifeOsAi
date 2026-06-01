@@ -193,7 +193,7 @@ export default function SignupPage() {
               <span className="text-xs text-muted-foreground block mb-2 font-medium">Just want to preview the app?</span>
               <Button
                 type="button"
-                onClick={startDemoMode}
+                onClick={() => startDemoMode(name)}
                 variant="ghost"
                 className="text-primary hover:text-accent hover:bg-primary/10 font-bold border border-primary/20 rounded-full px-6 py-2 h-auto text-xs animate-bounce"
               >

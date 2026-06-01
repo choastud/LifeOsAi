@@ -12,6 +12,7 @@ import { motion } from 'framer-motion';
 
 export default function LoginPage() {
   const { login, loginWithGoogle, startDemoMode } = useAuth();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +27,7 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const { error } = await login(email, password);
+    const { error } = await login(email, password, name);
     setLoading(false);
 
     if (error) {
@@ -70,6 +71,17 @@ export default function LoginPage() {
           
           <CardContent className="space-y-4 pt-4 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Your Name / Nickname</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Hema"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg transition-all"
+                  disabled={loading || googleLoading}
+                />
+              </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Email Address</label>
                 <Input
@@ -183,7 +195,7 @@ export default function LoginPage() {
               <span className="text-xs text-muted-foreground block mb-2 font-medium">Just want to preview the app?</span>
               <Button
                 type="button"
-                onClick={startDemoMode}
+                onClick={() => startDemoMode(name)}
                 variant="ghost"
                 className="text-primary hover:text-accent hover:bg-primary/10 font-bold border border-primary/20 rounded-full px-6 py-2 h-auto text-xs animate-bounce"
               >

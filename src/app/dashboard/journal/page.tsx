@@ -223,9 +223,7 @@ export default function JournalPage() {
                     Coaching feedback for log on {new Date(activeEntry.created_at).toLocaleDateString()}
                   </CardDescription>
                 </div>
-                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase shrink-0">
-                  {getMoodBadge(activeEntry.mood)}
-                </span>
+
               </CardHeader>
               <CardContent className="text-xs leading-relaxed text-foreground text-left font-medium">
                 {activeEntry.ai_insights || 'AI is calculating reflections... Ask the coach to generate advice.'}
@@ -243,7 +241,7 @@ export default function JournalPage() {
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <span>Past Reflections</span>
             </h3>
-            <p className="text-[10px] text-muted-foreground">Select logs to review mood patterns.</p>
+            <p className="text-[10px] text-muted-foreground">Select logs to review coaching insights.</p>
           </div>
 
           {loading ? (
@@ -285,11 +283,7 @@ export default function JournalPage() {
                       <p className="text-xs leading-relaxed line-clamp-2 font-semibold text-foreground/80">“{e.content}”</p>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] uppercase font-bold tracking-wide bg-secondary/80 px-2 py-0.5 rounded text-foreground">
-                        {getMoodBadge(e.mood)}
-                      </span>
-                    </div>
+
                   </div>
                 ))}
               </AnimatePresence>
