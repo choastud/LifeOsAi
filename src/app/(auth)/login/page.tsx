@@ -190,7 +190,7 @@ export default function LoginPage() {
               </TabsList>
 
               <AnimatePresence mode="wait">
-                <TabsContent value="signin" className="space-y-4 focus-visible:outline-none">
+                <TabsContent key="signin" value="signin" className="space-y-4 focus-visible:outline-none">
                   <form onSubmit={handleSubmit} className="space-y-4">
                     {/* Optional Name field to sync during credentials login */}
                     <div className="space-y-1.5">
@@ -316,7 +316,7 @@ export default function LoginPage() {
                   </Button>
                 </TabsContent>
 
-                <TabsContent value="guest" className="space-y-4 focus-visible:outline-none">
+                <TabsContent key="guest" value="guest" className="space-y-4 focus-visible:outline-none">
                   <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground leading-relaxed">
                     ⚙️ <strong>Local Guest Sandbox Mode</strong>: Launching this mode allows you to browse the application completely offline. All data will be saved locally inside your browser's Cache and LocalStorage.
                   </div>

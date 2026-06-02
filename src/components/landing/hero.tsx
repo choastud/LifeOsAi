@@ -235,7 +235,7 @@ export default function LandingHero() {
                     </TabsList>
 
                     <AnimatePresence mode="wait">
-                      <TabsContent value="signin" className="space-y-4 focus-visible:outline-none">
+                      <TabsContent key="signin" value="signin" className="space-y-4 focus-visible:outline-none">
                         <form onSubmit={handleSubmit} className="space-y-3.5">
                           {/* Optional Name field to sync during credentials login */}
                           <div className="space-y-1">
@@ -360,7 +360,7 @@ export default function LandingHero() {
                         </Button>
                       </TabsContent>
 
-                      <TabsContent value="guest" className="space-y-4 focus-visible:outline-none">
+                      <TabsContent key="guest" value="guest" className="space-y-4 focus-visible:outline-none">
                         <div className="p-3 rounded-lg bg-primary/5 border border-primary/15 text-[10px] text-muted-foreground leading-normal">
                           ⚙️ <strong>Local Guest Sandbox Mode</strong>: Launching this mode allows you to browse the application completely offline. All data will be saved locally inside your browser.
                         </div>
