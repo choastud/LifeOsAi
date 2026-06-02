@@ -33,6 +33,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
 
+  const syncProfileAndSetUser = async (sessionUser: any, client: any) => {
+    try {
+      const oauthNickname = typeof window !== 'undefined' ? localStorage.getItem('lifeos_oauth_nickname') : null;
+      
+      let { data: profile } = await client
+        .from('profiles')
+        .select('*')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+      const finalName = oauthNickname || profile?.name || sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'User';
+
+      if (oauthNickname || !profile) {
+        await client
+          .from('profiles')
+          .upsert({
+            id: sessionUser.id,
+            name: finalName,
+            email: sessionUser.email,
+            updated_at: new Date().toISOString()
+          });
+        
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('lifeos_oauth_nickname');
+        }
+
+        // Re-fetch profile
+        const { data: updatedProfile } = await client
+          .from('profiles')
+          .select('*')
+          .eq('id', sessionUser.id)
+          .maybeSingle();
+        profile = updatedProfile;
+      }
+
+      setUser({
+        id: sessionUser.id,
+        name: profile?.name || finalName,
+        email: sessionUser.email || '',
+        avatar_url: profile?.avatar_url || sessionUser.user_metadata?.avatar_url || '',
+        theme: profile?.theme || 'light',
+        created_at: sessionUser.created_at
+      });
+    } catch (err) {
+      console.error('Error syncing profile:', err);
+      // Fallback setting user to avoid blocking logins
+      setUser({
+        id: sessionUser.id,
+        name: sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'User',
+        email: sessionUser.email || '',
+        avatar_url: sessionUser.user_metadata?.avatar_url || '',
+        theme: 'light',
+        created_at: sessionUser.created_at
+      });
+    }
+  };
+
   const refreshUser = async () => {
     const hasDemoCookie = typeof document !== 'undefined' && document.cookie.split('; ').find(row => row.startsWith('lifeos_demo_mode='))?.split('=')[1] === 'true';
     if (!isSupabaseConfigured || hasDemoCookie) {
@@ -48,20 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session;
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        const refreshedUser: UserProfile = {
-          id: session.user.id,
-          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-          email: session.user.email || '',
-          avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
-          theme: profile?.theme || 'light',
-          created_at: session.user.created_at
-        };
-        setUser(refreshedUser);
+        await syncProfileAndSetUser(session.user, supabase);
       } else {
         setUser(null);
       }
@@ -120,21 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsDemo(false);
 
         if (session?.user) {
-          // Fetch profile details
-          const { data: profile } = await client
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-
-          setUser({
-            id: session.user.id,
-            name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-            email: session.user.email || '',
-            avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
-            theme: profile?.theme || 'light',
-            created_at: session.user.created_at
-          });
+          await syncProfileAndSetUser(session.user, client);
         } else {
           setUser(null);
         }
@@ -146,21 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             document.cookie = 'lifeos_demo_mode=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             localStorage.removeItem('lifeos_demo_user');
             setIsDemo(false);
-
-            const { data: profile } = await client
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-
-            setUser({
-              id: session.user.id,
-              name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-              email: session.user.email || '',
-              avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
-              theme: profile?.theme || 'light',
-              created_at: session.user.created_at
-            });
+            await syncProfileAndSetUser(session.user, client);
           } else {
             setUser(null);
             setIsDemo(false);
@@ -338,6 +354,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            prompt: 'select_account' // Forces Google to show the account selection dialog
+          }
         },
       });
       if (error) return { error: error.message };

@@ -40,6 +40,9 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (name.trim()) {
+      localStorage.setItem('lifeos_oauth_nickname', name.trim());
+    }
     setGoogleLoading(true);
     const { error } = await loginWithGoogle();
     setGoogleLoading(false);
