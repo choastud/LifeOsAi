@@ -18,7 +18,7 @@ interface AuthContextType {
   loading: boolean;
   isDemo: boolean;
   login: (email: string, password: string, name?: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null; needsConfirmation?: boolean }>;
   loginWithGoogle: () => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   startDemoMode: (nameOrEvent?: any) => void;
@@ -206,18 +206,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: { session }, error } = await supabase!.auth.signInWithPassword({ email, password });
       if (error) return { error: error.message };
 
-      // Fetch user profile after successful sign‑in
+      // Guarantee and fetch user profile after successful sign‑in
       if (session?.user) {
-        if (name) {
-          await supabase!
-            .from('profiles')
-            .upsert({
-              id: session.user.id,
-              name,
-              email: session.user.email,
-              updated_at: new Date().toISOString()
-            });
-        }
+        const profileName = name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User';
+        await supabase!
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            name: profileName,
+            email: session.user.email,
+            updated_at: new Date().toISOString()
+          });
 
         const { data: profile } = await supabase!
           .from('profiles')
@@ -226,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
         const loggedInUser: UserProfile = {
           id: session.user.id,
-          name: profile?.name || name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          name: profile?.name || profileName,
           email: session.user.email || '',
           avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
           theme: profile?.theme || 'light',
@@ -272,7 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to refresh after sign‑up', e);
       }
       router.push('/dashboard');
-      return { error: null };
+      return { error: null, needsConfirmation: false };
     }
 
     try {
@@ -292,8 +291,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) return { error: error.message };
 
-      // Fetch profile after successful sign‑up
+      // Guarantee and fetch profile after successful sign‑up
       if (session?.user) {
+        await supabase!
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            name: name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+            email: session.user.email,
+            updated_at: new Date().toISOString()
+          });
+
         const { data: profile } = await supabase!
           .from('profiles')
           .select('*')
@@ -301,17 +309,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
         const newUser: UserProfile = {
           id: session.user.id,
-          name: profile?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          name: profile?.name || name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
           email: session.user.email || '',
           avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
           theme: profile?.theme || 'light',
           created_at: session.user.created_at
         };
         setUser(newUser);
+        router.push('/dashboard');
+        return { error: null, needsConfirmation: false };
+      } else {
+        // If email confirmation is enabled, session will be null here
+        return { error: null, needsConfirmation: true };
       }
-
-      router.push('/dashboard');
-      return { error: null };
     } catch (err: any) {
       return { error: err.message || 'An error occurred during registration' };
     }

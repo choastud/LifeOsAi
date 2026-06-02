@@ -36,7 +36,7 @@ const MENU_ITEMS = [
 
 export default function DashboardSidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, isDemo, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -113,6 +113,18 @@ export default function DashboardSidebar() {
           <div className={cn("text-left overflow-hidden transition-all duration-300", collapsed ? "w-0 opacity-0" : "flex-1")}>
             <div className="text-sm font-bold text-foreground truncate">{user?.name}</div>
             <div className="text-[10px] text-muted-foreground truncate">{user?.email}</div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full animate-pulse",
+                isDemo ? "bg-amber-500" : "bg-emerald-500"
+              )} />
+              <span className={cn(
+                "text-[9px] font-bold tracking-wider uppercase",
+                isDemo ? "text-amber-600/90 dark:text-amber-400" : "text-emerald-600/90 dark:text-emerald-400"
+              )}>
+                {isDemo ? 'Guest Sandbox' : 'Cloud Sync Active'}
+              </span>
+            </div>
           </div>
         </div>
 

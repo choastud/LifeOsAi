@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +12,7 @@ import { Sparkles, ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, User, Terminal,
 import { motion } from 'framer-motion';
 
 export default function SignupPage() {
+  const router = useRouter();
   const { signUp, loginWithGoogle, startDemoMode } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,11 +34,16 @@ export default function SignupPage() {
     }
 
     setLoading(true);
-    const { error } = await signUp(email, password, name);
+    const { error, needsConfirmation } = await signUp(email, password, name);
     setLoading(false);
 
     if (error) {
       toast.error(error);
+    } else if (needsConfirmation) {
+      toast.success('Registration successful! Please check your email inbox to confirm your account before signing in.', {
+        duration: 10000
+      });
+      router.push('/login');
     } else {
       toast.success('Registration successful! Welcome to LifeOS AI.');
     }

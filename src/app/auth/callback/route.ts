@@ -12,6 +12,17 @@ export async function GET(request: Request) {
     if (supabase) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (!error) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('profiles')
+            .upsert({
+              id: user.id,
+              name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+              email: user.email || '',
+              updated_at: new Date().toISOString()
+            });
+        }
         return NextResponse.redirect(`${origin}${next}`);
       }
     }
