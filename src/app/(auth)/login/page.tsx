@@ -190,163 +190,167 @@ export default function LoginPage() {
               </TabsList>
 
               <AnimatePresence mode="wait">
-                <TabsContent key="signin" value="signin" className="space-y-4 focus-visible:outline-none">
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Optional Name field to sync during credentials login */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Name / Nickname (Optional)</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type="text"
-                          placeholder="e.g. Hema"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
-                          disabled={loading || googleLoading}
-                        />
+                {activeTab === 'signin' && (
+                  <TabsContent key="signin" value="signin" className="space-y-4 focus-visible:outline-none">
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      {/* Optional Name field to sync during credentials login */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Name / Nickname (Optional)</label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            type="text"
+                            placeholder="e.g. Hema"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
+                            disabled={loading || googleLoading}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/80 block px-1">If provided, this name will sync to your user profile.</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground/80 block px-1">If provided, this name will sync to your user profile.</span>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type="email"
-                          placeholder="name@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
-                          required
-                          disabled={loading || googleLoading}
-                        />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address</label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            type="email"
+                            placeholder="name@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
+                            required
+                            disabled={loading || googleLoading}
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Password</label>
-                        <Link
-                          href="/reset-password"
-                          className="text-xs text-primary hover:underline hover:text-accent font-medium transition-colors"
-                        >
-                          Forgot password?
-                        </Link>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Password</label>
+                          <Link
+                            href="/reset-password"
+                            className="text-xs text-primary hover:underline hover:text-accent font-medium transition-colors"
+                          >
+                            Forgot password?
+                          </Link>
+                        </div>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 pr-10 py-5 transition-all"
+                            required
+                            disabled={loading || googleLoading}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 pr-10 py-5 transition-all"
-                          required
-                          disabled={loading || googleLoading}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+
+                      <Button
+                        type="submit"
+                        className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold rounded-xl py-6 flex items-center justify-center gap-2 group transition-all duration-300 shadow-md shadow-primary/10 mt-2"
+                        disabled={loading || googleLoading}
+                      >
+                        {loading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <>
+                            <span>Sign In</span>
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          </>
+                        )}
+                      </Button>
+                    </form>
+
+                    <div className="relative my-5">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-border/60"></div>
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-3 text-muted-foreground font-medium">Or continue with</span>
                       </div>
                     </div>
 
                     <Button
-                      type="submit"
-                      className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold rounded-xl py-6 flex items-center justify-center gap-2 group transition-all duration-300 shadow-md shadow-primary/10 mt-2"
+                      type="button"
+                      variant="outline"
+                      onClick={handleGoogleLogin}
+                      className="w-full border-border/80 bg-background/30 hover:bg-background/60 hover:text-foreground text-muted-foreground py-6 rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2"
                       disabled={loading || googleLoading}
                     >
-                      {loading ? (
+                      {googleLoading ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
                         <>
-                          <span>Sign In</span>
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                          <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24">
+                            <path
+                              fill="currentColor"
+                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            />
+                            <path
+                              fill="currentColor"
+                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                              fill="currentColor"
+                              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                            />
+                            <path
+                              fill="currentColor"
+                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                            />
+                          </svg>
+                          <span>Google Account</span>
                         </>
                       )}
                     </Button>
-                  </form>
+                  </TabsContent>
+                )}
 
-                  <div className="relative my-5">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-border/60"></div>
+                {activeTab === 'guest' && (
+                  <TabsContent key="guest" value="guest" className="space-y-4 focus-visible:outline-none">
+                    <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground leading-relaxed">
+                      ⚙️ <strong>Local Guest Sandbox Mode</strong>: Launching this mode allows you to browse the application completely offline. All data will be saved locally inside your browser's Cache and LocalStorage.
                     </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-3 text-muted-foreground font-medium">Or continue with</span>
-                    </div>
-                  </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleGoogleLogin}
-                    className="w-full border-border/80 bg-background/30 hover:bg-background/60 hover:text-foreground text-muted-foreground py-6 rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2"
-                    disabled={loading || googleLoading}
-                  >
-                    {googleLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24">
-                          <path
-                            fill="currentColor"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    <form onSubmit={handleStartDemo} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Nickname</label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            type="text"
+                            placeholder="e.g. Hema"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
+                            required
                           />
-                          <path
-                            fill="currentColor"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          />
-                          <path
-                            fill="currentColor"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                          />
-                          <path
-                            fill="currentColor"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                          />
-                        </svg>
-                        <span>Google Account</span>
-                      </>
-                    )}
-                  </Button>
-                </TabsContent>
-
-                <TabsContent key="guest" value="guest" className="space-y-4 focus-visible:outline-none">
-                  <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground leading-relaxed">
-                    ⚙️ <strong>Local Guest Sandbox Mode</strong>: Launching this mode allows you to browse the application completely offline. All data will be saved locally inside your browser's Cache and LocalStorage.
-                  </div>
-
-                  <form onSubmit={handleStartDemo} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your Nickname</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          type="text"
-                          placeholder="e.g. Hema"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className="bg-background/50 border-border/80 focus:border-primary focus:ring-1 focus:ring-primary rounded-xl pl-10 py-5 transition-all"
-                          required
-                        />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground/80 block px-1">This name will personalize your greetings and Autopilot executive summaries.</span>
                       </div>
-                      <span className="text-[10px] text-muted-foreground/80 block px-1">This name will personalize your greetings and Autopilot executive summaries.</span>
-                    </div>
 
-                    <Button
-                      type="submit"
-                      className="w-full bg-accent hover:bg-accent/95 text-accent-foreground font-bold rounded-xl py-6 flex items-center justify-center gap-2 group transition-all duration-300 shadow-md shadow-accent/10 mt-2"
-                    >
-                      <span>Launch Guest Demo</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                    </Button>
-                  </form>
-                </TabsContent>
+                      <Button
+                        type="submit"
+                        className="w-full bg-accent hover:bg-accent/95 text-accent-foreground font-bold rounded-xl py-6 flex items-center justify-center gap-2 group transition-all duration-300 shadow-md shadow-accent/10 mt-2"
+                      >
+                        <span>Launch Guest Demo</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                      </Button>
+                    </form>
+                  </TabsContent>
+                )}
               </AnimatePresence>
             </Tabs>
 
